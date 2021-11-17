@@ -88,11 +88,15 @@ def plot_testcase_diff(testDir, baseDir, strainType, filenameOut):
     filein.close()
 
     # differences
-    uVelocity = uVelocityTest[:]# - uVelocityBase[:]
-    vVelocity = vVelocityTest[:]# - vVelocityBase[:]
+    #uVelocity = uVelocityTest[:]# - uVelocityBase[:]
+    #vVelocity = vVelocityTest[:]# - vVelocityBase[:]
+    uVelocity = uVelocityTest[:] - uVelocityBase[:]
+    vVelocity = vVelocityTest[:] - vVelocityBase[:]
 
-    stressDivergenceU = stressDivergenceUTest[:]# - stressDivergenceUBase[:]
-    stressDivergenceV = stressDivergenceVTest[:]# - stressDivergenceVBase[:]
+    #stressDivergenceU = stressDivergenceUTest[:]# - stressDivergenceUBase[:]
+    #stressDivergenceV = stressDivergenceVTest[:]# - stressDivergenceVBase[:]
+    stressDivergenceU = stressDivergenceUTest[:] - stressDivergenceUBase[:]
+    stressDivergenceV = stressDivergenceVTest[:] - stressDivergenceVBase[:]
 
     if (strainType == "varvar"):
         strain11var = strain11varTest[:] - strain11varBase[:]
@@ -309,20 +313,20 @@ def plot_testcase():
                        "varvar",
                        "square_pwl_wachs_diff.png")
 
-    plot_testcase_diff("output_hex_pwlavg_0082x0094_120",
-                       "output_hex_wachsavg_0082x0094_120",
-                       "varvar",
-                       "square_pwlavg_wachsavg_diff.png")
+    #plot_testcase_diff("output_hex_pwlavg_0082x0094_120",
+    #                   "output_hex_wachsavg_0082x0094_120",
+    #                   "varvar",
+    #                   "square_pwlavg_wachsavg_diff.png")
 
-    plot_testcase_diff("output_hex_weak_0082x0094_120",
-                       "output_hex_wachspress_0082x0094_120",
-                       "weakvar",
-                       "square_weak_wachs_diff.png")
+    #plot_testcase_diff("output_hex_weak_0082x0094_120",
+    #                   "output_hex_wachspress_0082x0094_120",
+    #                   "weakvar",
+    #                   "square_weak_wachs_diff.png")
 
-    plot_testcase_diff("output_hex_weakwachs_0082x0094_120",
-                       "output_hex_wachspress_0082x0094_120",
-                       "varvar",
-                       "square_weakwachs_wachs_diff.png")
+    #plot_testcase_diff("output_hex_weakwachs_0082x0094_120",
+    #                   "output_hex_wachspress_0082x0094_120",
+    #                   "varvar",
+    #                   "square_weakwachs_wachs_diff.png")
 
 #-------------------------------------------------------------------------------
 
