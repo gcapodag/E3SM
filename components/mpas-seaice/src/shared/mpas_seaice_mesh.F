@@ -327,13 +327,18 @@ contains
 
     real(kind=RKIND), dimension(:), pointer :: &
          latVertex, &
-         fVertex
+         fVertex, &
+         latEdge, &
+         fEdge
 
     integer, pointer :: &
-         nVertices
+         nVertices, &
+         nEdges
 
     integer :: &
-         iVertex
+         iVertex, &
+         iEdge
+
     logical, pointer :: &
          config_calculate_coriolis
 
@@ -346,15 +351,24 @@ contains
           call MPAS_pool_get_subpool(block % structs, "mesh", meshPool)
 
           call MPAS_pool_get_dimension(meshPool, "nVertices", nVertices)
+          call MPAS_pool_get_dimension(meshPool, "nEdges", nEdges)
 
           call MPAS_pool_get_array(meshPool, "latVertex", latVertex)
           call MPAS_pool_get_array(meshPool, "fVertex", fVertex)
+          call MPAS_pool_get_array(meshPool, "latEdge", latEdge)
+          call MPAS_pool_get_array(meshPool, "fEdge", fEdge)
 
           do iVertex = 1, nVertices
 
              fVertex(iVertex) = 2.0_RKIND * omega * sin(latVertex(iVertex))
 
           enddo ! iVertex
+
+          do iEdge = 1, nEdges
+
+             fEdge(iEdge) = 2.0_RKIND * omega * sin(latEdge(iEdge))
+
+          enddo ! iEdge
 
           block => block % next
        enddo
