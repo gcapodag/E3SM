@@ -3974,10 +3974,7 @@ contains
      s = (a + b + c) * 0.5_RKIND
 
      underSqrt = s * (s - a) * (s - b) * (s - c)     
-     if (abs(underSqrt) < 1.e-11) then
-        underSqrt = abs(underSqrt) !to handle numerical zeros
-     end if
-     planar_triangle_area = sqrt(underSqrt)
+     planar_triangle_area = sqrt(abs(underSqrt))
 
    end function planar_triangle_area
 
