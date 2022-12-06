@@ -40,7 +40,8 @@ module seaice_velocity_solver_constitutive_relation
   ! general EVP parameters
   real(kind=RKIND), parameter, private :: &
        eccentricity = 2.0_RKIND, &
-       dampingTimescaleParameter = 0.36_RKIND
+       !dampingTimescaleParameter = 0.36_RKIND
+       dampingTimescaleParameter = 12.5_RKIND
 
   real(kind=RKIND), parameter, public :: &
        eccentricitySquared = eccentricity**2, &

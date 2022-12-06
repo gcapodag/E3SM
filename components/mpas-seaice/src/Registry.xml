@@ -619,7 +619,11 @@
 		<nml_option name="config_use_air_stress" type="logical" default_value="true" units="unitless"
 			description="If true include the air stress term in the velocity solver calculations."
 			possible_values="true or. false."
-		/>
+          	/>
+               <nml_option name="config_use_inline_air_velocity" type="logical" default_value="false" units="unitless"
+                        description="If true allow the use of inline user-defined air velocity."
+                        possible_values="true or. false."
+                />
 		<nml_option name="config_use_ocean_stress" type="logical" default_value="true" units="unitless"
 			description="If true include the ocean stress term in the velocity solver calculations."
 			possible_values="true or. false."

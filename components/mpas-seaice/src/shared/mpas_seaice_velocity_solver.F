@@ -1811,7 +1811,7 @@ contains
 
     if (.not. config_use_column_package .or. &
          (config_use_column_package .and. .not. config_use_column_vertical_thermodynamics)) then
-       call constant_air_stress(domain)
+       call compute_air_stress(domain)
     endif
 
     ! check for no air stress
@@ -1925,7 +1925,7 @@ contains
 
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
-!  constant_air_stress
+!  compute_air_stress
 !
 !> \brief
 !> \author Adrian K. Turner, LANL
@@ -1935,7 +1935,9 @@ contains
 !
 !-----------------------------------------------------------------------
 
-  subroutine constant_air_stress(domain)
+  subroutine compute_air_stress(domain)
+
+    use seaice_constants, only: pii
 
     type(domain_type), intent(inout) :: &
          domain
@@ -1946,7 +1948,9 @@ contains
     type(MPAS_pool_type), pointer :: &
          velocitySolverPool, &
          atmosCouplingPool, &
-         tracersAggregatePool
+         tracersAggregatePool, &
+         meshPool, &
+         diagnosticsPool
 
     real(kind=RKIND), dimension(:), pointer :: &
          airStressCellU, &
@@ -1954,7 +1958,11 @@ contains
          uAirVelocity, &
          vAirVelocity, &
          airDensity, &
-         iceAreaCell
+         iceAreaCell, &
+         xVertex, &
+         yVertex, &
+         xCell, &
+         yCell
 
     real(kind=RKIND) :: &
          windSpeed
@@ -1967,6 +1975,82 @@ contains
 
     real(kind=RKIND), parameter :: &
          airStressCoeff = 0.0012_RKIND
+
+    real(kind=RKIND), pointer :: &
+         daysSinceStartOfSim
+
+    logical, pointer :: &
+         config_use_inline_air_velocity
+
+    real(kind=RKIND) :: &
+         mx, &
+         my, &
+         r, &
+         alpha,&
+         x, &
+         y, &
+         svmax, &
+         xmin, &
+         ymin, &
+         xmax, & 
+         ymax
+
+    call MPAS_pool_get_config(domain % blocklist % configs, "config_use_inline_air_velocity", config_use_inline_air_velocity)
+
+    if (config_use_inline_air_velocity) then
+
+       block => domain % blocklist
+       do while (associated(block))
+
+          call MPAS_pool_get_dimension(block % dimensions, "nCellsSolve", nCellsSolve)
+
+          call MPAS_pool_get_subpool(block % structs, "velocity_solver", velocitySolverPool)
+          call MPAS_pool_get_subpool(block % structs, "atmos_coupling", atmosCouplingPool)
+
+          call MPAS_pool_get_array(velocitySolverPool, "airStressCellU", airStressCellU)
+          call MPAS_pool_get_array(velocitySolverPool, "airStressCellV", airStressCellV)
+
+          call MPAS_pool_get_array(atmosCouplingPool, "uAirVelocity", uAirVelocity)
+          call MPAS_pool_get_array(atmosCouplingPool, "vAirVelocity", vAirVelocity)
+          call MPAS_pool_get_array(atmosCouplingPool, "airDensity", airDensity)
+
+          call MPAS_pool_get_subpool(block % structs, "mesh", meshPool)
+          call MPAS_pool_get_subpool(block % structs, "diagnostics",diagnosticsPool)
+          call MPAS_pool_get_array(meshPool, "xVertex", xVertex)
+          call MPAS_pool_get_array(meshPool, "yVertex", yVertex)
+          call MPAS_pool_get_array(meshPool, "xCell", xCell)
+          call MPAS_pool_get_array(meshPool, "yCell", yCell)
+
+          call mpas_pool_get_array(diagnosticsPool, 'daysSinceStartOfSim',daysSinceStartOfSim)
+
+          mx = 1000.0_RKIND * (256.0_RKIND + 51.2_RKIND * daysSinceStartOfSim)
+          my = 1000.0_RKIND * (256.0_RKIND + 51.2_RKIND * daysSinceStartOfSim)
+          alpha = 72.0_RKIND * pii / 180.0_RKIND
+
+          xmin = minval(xVertex)
+          ymin = minval(yVertex)
+          xmax = maxval(xVertex)
+          ymax = maxval(yVertex)
+
+          do iCell = 1, nCellsSolve
+
+             x = xCell(iCell) - xmin
+             y = yCell(iCell) - ymin
+             r = sqrt( (mx-x) * (mx-x) + (my-y) * (my-y) )
+             svmax = 3.0e-4 * exp(-1.0e-5 * r)
+
+             uAirVelocity(iCell) = - svmax * ( cos(alpha) * (x-mx) + sin(alpha )* (y-my) )
+             vAirVelocity(iCell) = - svmax * ( -sin(alpha) * (x-mx) + cos(alpha) * (y-my) )
+
+          end do
+       
+          block => block % next
+       end do
+
+    call MPAS_dmpar_field_halo_exch(domain, 'uAirVelocity')
+    call MPAS_dmpar_field_halo_exch(domain, 'vAirVelocity')
+
+    end if
 
     block => domain % blocklist
     do while (associated(block))
@@ -1985,7 +2069,7 @@ contains
        call MPAS_pool_get_array(atmosCouplingPool, "airDensity", airDensity)
 
        call MPAS_pool_get_array(tracersAggregatePool, "iceAreaCell", iceAreaCell)
-
+   
        do iCell = 1, nCellsSolve
 
           windSpeed = sqrt(uAirVelocity(iCell)**2 + vAirVelocity(iCell)**2)
@@ -1998,7 +2082,7 @@ contains
        block => block % next
     end do
 
-  end subroutine constant_air_stress
+  end subroutine compute_air_stress
 
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !

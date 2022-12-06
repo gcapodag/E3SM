@@ -464,6 +464,9 @@ contains
     integer, dimension(:), pointer :: &
          interiorVertex
 
+  real(kind=RKIND), dimension(:), pointer :: &
+         xVertex, yVertex
+
     integer :: &
          iVertex, &
          iVertexDegree, &
@@ -474,6 +477,8 @@ contains
     call MPAS_pool_get_dimension(mesh, "nVerticesSolve", nVerticesSolve)
     call MPAS_pool_get_dimension(mesh, "vertexDegree", vertexDegree)
     call MPAS_pool_get_dimension(mesh, "nCells", nCells)
+    call MPAS_pool_get_array(mesh, "xVertex", xVertex)
+    call MPAS_pool_get_array(mesh, "yVertex", yVertex)
 
     call MPAS_pool_get_array(mesh, "cellsOnVertex", cellsOnVertex)
 
@@ -502,6 +507,12 @@ contains
           interiorVertex(iVertex) = 1
 
        endif
+
+       !if (xVertex(iVertex) > 510000.0_RKIND .or. xVertex(iVertex) < 2000.0_RKIND .or. yVertex(iVertex) > 510000.0_RKIND .or. yVertex(iVertex) < 2000.0_RKIND) then
+       !if (xVertex(iVertex) > 508000.0_RKIND .or. xVertex(iVertex) < 4000.0_RKIND .or. yVertex(iVertex) > 508000.0_RKIND .or. yVertex(iVertex) < 4000.0_RKIND) then
+       !if (xVertex(iVertex) > 504000.0_RKIND .or. xVertex(iVertex) < 8000.0_RKIND .or. yVertex(iVertex) > 504000.0_RKIND .or. yVertex(iVertex) < 8000.0_RKIND) then
+       !   interiorVertex(iVertex) = 0
+       !end if
 
     enddo ! iVertex
 
@@ -546,6 +557,9 @@ contains
     integer, dimension(:), pointer :: &
          interiorCell
 
+    real(kind=RKIND), dimension(:), pointer :: &
+         xCell, yCell
+
     call MPAS_pool_get_array(boundary, "interiorCell", interiorCell)
 
     call MPAS_pool_get_dimension(mesh, "nCellsSolve", nCellsSolve)
@@ -553,6 +567,8 @@ contains
 
     call MPAS_pool_get_array(mesh, "nEdgesOnCell", nEdgesOnCell)
     call MPAS_pool_get_array(mesh, "cellsOnCell", cellsOnCell)
+    call MPAS_pool_get_array(mesh, "xCell", xCell)
+    call MPAS_pool_get_array(mesh, "yCell", yCell)
 
     do iCell = 1, nCellsSolve
 
@@ -567,6 +583,12 @@ contains
           endif
 
        enddo ! iEdgeOnCell
+
+       !if (xCell(iCell) > 510000.0_RKIND .or. xCell(iCell) < 2000.0_RKIND .or. yCell(iCell) > 510000.0_RKIND .or. yCell(iCell) < 2000.0_RKIND) then
+       !if (xCell(iCell) > 508000.0_RKIND .or. xCell(iCell) < 4000.0_RKIND .or. yCell(iCell) > 508000.0_RKIND .or. yCell(iCell) < 4000.0_RKIND) then
+       !if (xCell(iCell) > 504000.0_RKIND .or. xCell(iCell) < 8000.0_RKIND .or. yCell(iCell) > 504000.0_RKIND .or. yCell(iCell) < 8000.0_RKIND) then
+       !   interiorCell(iCell) = 0
+       !end if
 
     enddo ! iCell
 
@@ -604,6 +626,9 @@ contains
     integer, dimension(:), pointer :: &
          interiorEdge
 
+    real(kind=RKIND), dimension(:), pointer :: &
+         xEdge, yEdge
+
     integer :: &
          iEdge, &
          iCellOnEdge
@@ -612,6 +637,8 @@ contains
 
     call MPAS_pool_get_dimension(mesh, "nEdgesSolve", nEdgesSolve)
     call MPAS_pool_get_dimension(mesh, "nCells", nCells)
+    call MPAS_pool_get_array(mesh, "xEdge", xEdge)
+    call MPAS_pool_get_array(mesh, "yEdge", yEdge)
 
     call MPAS_pool_get_array(mesh, "cellsOnEdge", cellsOnEdge)
 
@@ -628,6 +655,12 @@ contains
           endif
 
        enddo ! iCellOnEdge
+
+       !if (xEdge(iEdge) > 510000.0_RKIND .or. xEdge(iEdge) < 2000.0_RKIND .or. yEdge(iEdge) > 510000.0_RKIND .or. yEdge(iEdge) < 2000.0_RKIND) then
+       !if (xEdge(iEdge) > 508000.0_RKIND .or. xEdge(iEdge) < 4000.0_RKIND .or. yEdge(iEdge) > 508000.0_RKIND .or. yEdge(iEdge) < 4000.0_RKIND) then
+       !if (xEdge(iEdge) > 504000.0_RKIND .or. xEdge(iEdge) < 8000.0_RKIND .or. yEdge(iEdge) > 504000.0_RKIND .or. yEdge(iEdge) < 8000.0_RKIND) then
+       !   interiorEdge(iEdge) = 0
+       !end if
 
     end do ! iEdge
 
@@ -3974,10 +4007,7 @@ contains
      s = (a + b + c) * 0.5_RKIND
 
      underSqrt = s * (s - a) * (s - b) * (s - c)     
-     if (abs(underSqrt) < 1.e-11) then
-        underSqrt = abs(underSqrt) !to handle numerical zeros
-     end if
-     planar_triangle_area = sqrt(underSqrt)
+     planar_triangle_area = sqrt(abs(underSqrt))
 
    end function planar_triangle_area
 
