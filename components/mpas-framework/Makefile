@@ -46,6 +46,7 @@ xlf:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -77,6 +78,7 @@ xlf-summit-omp-offload:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"OPENMP_OFFLOAD = $(OPENMP_OFFLOAD)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
@@ -102,6 +104,7 @@ ftn:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -131,6 +134,7 @@ pgi:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI -DCPRPGI" )
@@ -162,6 +166,7 @@ pgi-summit:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"OPENACC = $(OPENACC)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
@@ -192,6 +197,7 @@ ifort:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -220,6 +226,7 @@ ifort-scorep:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -248,6 +255,7 @@ ifort-gcc:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -277,6 +285,7 @@ intel-mpi:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -312,6 +321,7 @@ gfortran:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -346,6 +356,7 @@ gfortran-clang:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -370,6 +381,7 @@ g95:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -405,6 +417,7 @@ gnu-cray:
 	"DEBUG = $(DEBUG)" \
 	"SERIAL = $(SERIAL)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI $(FILE_OFFSET) $(ZOLTAN_DEFINE)" )
@@ -433,6 +446,7 @@ intel-cray:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -497,6 +511,7 @@ llvm:
 	"CORE = $(CORE)" \
 	"DEBUG = $(DEBUG)" \
 	"USE_PAPI = $(USE_PAPI)" \
+	"USE_LTS = $(USE_LTS)" \
 	"OPENMP = $(OPENMP)" \
 	"USE_SHTNS = $(USE_SHTNS)" \
 	"CPPFLAGS = $(MODEL_FORMULATION) -D_MPI" )
@@ -613,6 +628,10 @@ endif
 
 ifeq "$(USE_SHTNS)" "true"
 	override CPPFLAGS += -DUSE_SHTNS
+endif
+
+ifeq "$(USE_LTS)" "true"
+    override CPPFLAGS += -DUSE_LTS
 endif
 
 RM = rm -f
