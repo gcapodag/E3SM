@@ -247,6 +247,7 @@ contains
                           - kineticEnergyCell(k,cell1))*invLength)
          end do
       end do
+
 #ifndef MPAS_OPENACC
       !$omp end do
       !$omp end parallel
@@ -304,6 +305,10 @@ contains
 
       case ('LTS','lts')
          ! For LTS, coriolis tendency term includes f: (eta+f)/h.
+         usePlanetVorticity = .true.
+
+      case ('SSPRK3','ssprk3')
+         ! For SSPRK3, coriolis tendency term includes f: (eta+f)/h.
          usePlanetVorticity = .true.
 
       case ('split_explicit')

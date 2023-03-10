@@ -398,11 +398,13 @@ contains
 #ifdef MPAS_OPENACC
       !$acc loop independent
 #endif
-      do iCell = 1, nCells
-         do iTracer = 1,size(tracersSurfaceValue,1)
-            tracersSurfaceValue(iTracer, iCell) = activeTracers(iTracer, minLevelCell(iCell), iCell)
-         enddo
-      end do
+      if (.not. config_disable_tr_all_tend) then
+         do iCell = 1, nCells
+            do iTracer = 1,size(tracersSurfaceValue,1)
+               tracersSurfaceValue(iTracer, iCell) = activeTracers(iTracer, minLevelCell(iCell), iCell)
+            enddo
+         end do
+      end if
 #ifdef MPAS_OPENACC
       !$acc end kernels
 #else
@@ -3619,10 +3621,12 @@ contains
          do iCell = 1, nCellsSolve
             do k = minLevelCell(iCell), maxLevelCell(iCell)
                thickNanFound = thickNanFound .or. ( .not. layerThickness(k, iCell) == layerThickness(k, iCell) )
+               if (.not. config_disable_tr_all_tend) then
                do iTracer = 1, size(activeTracers, dim=1)
                   tracersNanFound = tracersNanFound .or. &
                                   ( .not. activeTracers(iTracer, k, iCell) == activeTracers(iTracer, k, iCell) )
                end do
+               end if
             end do
          end do
 
@@ -4201,7 +4205,7 @@ contains
          ke_cell_flag = 1
       endif
 
-      if ((trim(config_time_integrator) == 'RK4') .or.(trim(config_time_integrator) == 'LTS') ) then
+      if ((trim(config_time_integrator) == 'RK4') .or. (trim(config_time_integrator) == 'LTS') .or. (trim(config_time_integrator) == 'SSPRK3')) then
          ! For RK4 or LTS, PV includes f: PV = (eta+f)/h.
          fCoef = 1
       elseif (trim(config_time_integrator) == 'split_explicit' &

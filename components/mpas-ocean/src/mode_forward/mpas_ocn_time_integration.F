@@ -34,6 +34,7 @@ module ocn_time_integration
    use ocn_time_integration_split
    use ocn_time_integration_si
    use ocn_time_integration_lts
+   use ocn_time_integration_ssprk3
 
 
    implicit none
@@ -70,7 +71,8 @@ module ocn_time_integration
        timeIntUnsplitExplicit = 2, &! unsplit-explicit
        timeIntSemiImplicit    = 3, &! Semi-implicit
        timeIntRK4             = 4, &! 4th-order Runge-Kutta
-       timeIntLTS             = 5   ! local time-stepping
+       timeIntLTS             = 5, &! local time-stepping
+       timeIntSSPRK3          = 6   ! ssprk3
 
 !***********************************************************************
 
@@ -134,6 +136,8 @@ module ocn_time_integration
          call ocn_time_integrator_rk4(domain, dt)
       case (timeIntLTS)
          call ocn_time_integrator_lts(domain, dt)
+      case (timeIntSSPRK3)
+         call ocn_time_integrator_ssprk3(domain, dt)
       end select
 
       ! compute time since start of simulation, in days
@@ -227,6 +231,10 @@ module ocn_time_integration
 
       case ('LTS')
          timeIntegratorChoice = timeIntLTS
+         call ocn_time_integration_lts_init(domain)
+
+      case ('SSPRK3')
+         timeIntegratorChoice = timeIntSSPRK3
          call ocn_time_integration_lts_init(domain)
 
       case default

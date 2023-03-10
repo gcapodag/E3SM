@@ -128,6 +128,7 @@ contains
              * topographic_wave_drag(iEdge) * normalVelocity(k,iEdge)
         endif
       enddo
+
       !$omp end do
 
       call mpas_timer_stop('vel topographic wave drag')

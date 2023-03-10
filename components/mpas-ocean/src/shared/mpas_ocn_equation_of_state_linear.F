@@ -147,6 +147,10 @@ contains
 
       err = 0
 
+      if (config_disable_tr_all_tend) then
+          return
+      end if
+
       !*** check for displacement choice
       !*** for linear EOS, only choice that impacts the
       !*** density is surface displacement
@@ -297,6 +301,10 @@ contains
       !*** initialize error flag
 
       err = 0
+
+      if (config_disable_tr_all_tend) then
+          return
+      end if
 
       !*** check for displacement choice
       !*** for linear EOS, only choice that impacts the

@@ -1221,6 +1221,9 @@ contains
       !$acc update host(vertViscTopOfEdge)
 #endif
 
+
+
+      if(velVmixOn) then
       !
       !  Implicit vertical solve for momentum
       !
@@ -1252,6 +1255,9 @@ contains
 #endif
       call mpas_timer_stop('vmix solve momentum')
 
+      end if
+
+      if(tracerVmixOn) then
       !
       !  Implicit vertical solve for all tracers
       !
@@ -1344,6 +1350,7 @@ contains
          end if
       end do
       call mpas_timer_stop('vmix solve tracers')
+      end if
 
 #ifdef MPAS_OPENACC
       !$acc exit data delete(layerThickness)

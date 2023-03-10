@@ -2194,11 +2194,7 @@
 
 	</streams>
 
-#ifdef USE_LTS
 	<var_struct name="state" time_levs="4">
-#else    
-	<var_struct name="state" time_levs="2">
-#endif
 		<var name="normalVelocity" type="real" dimensions="nVertLevels nEdges Time" units="m s^-1"
 			 description="horizontal velocity, normal component to an edge"
 			 missing_value="FILLVAL" missing_value_mask="edgeMask"

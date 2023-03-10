@@ -217,6 +217,7 @@ contains
                                                - surfacePressure(cell1)) )
             end do
          end do
+
 #ifndef MPAS_OPENACC
          !$omp end do
          !$omp end parallel

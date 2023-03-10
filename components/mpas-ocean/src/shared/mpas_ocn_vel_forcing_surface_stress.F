@@ -184,6 +184,7 @@ contains
                               layerThickEdgeMean(kmax,iEdge)
         end if
       enddo
+
 #ifndef MPAS_OPENACC
       !$omp end do
       !$omp end parallel

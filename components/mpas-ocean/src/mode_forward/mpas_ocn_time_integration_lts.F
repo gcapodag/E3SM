@@ -105,7 +105,7 @@ module ocn_time_integration_lts
     !-----------------------------------------------------------------
 
     integer :: &
-       iCell, iEdge, iRegion, k, ic, ie, im, & !iterators
+       iCell, iEdge, iRegion, k, ic, ie, im, err, & !iterators
        M, & ! M = dtCoarse / dtFine
        nRegions !number of interface regions (two)
 
@@ -118,7 +118,8 @@ module ocn_time_integration_lts
        meshPool, & ! structure holding mesh variables
        forcingPool, & ! structure holding forcing variables
        scratchPool, & ! structure holding temporary variables
-       tracersPool  ! structure holding tracers variables
+       tracersPool, &  ! structure holding tracers variables
+       verticalMeshPool
 
     ! LTS Pools
     type (mpas_pool_type), pointer :: &
@@ -155,6 +156,11 @@ module ocn_time_integration_lts
        layerThicknessFirstStage, & ! layer thickness at first stage of LTS
        layerThicknessSecondStage ! layer thickness at second stage of LTS
 
+    real (kind=RKIND), dimension(:), pointer ::  &
+       sshCur, & 
+       sshFirstStage, &
+       sshSecondStage 
+
     ! LTS objects
     real (kind=RKIND) :: &
        dtFine, & ! fine dt, defined as dt / M
@@ -170,7 +176,11 @@ module ocn_time_integration_lts
     real (kind=RKIND) :: &
        weightTendSum1st, weightTendSum2nd, weightTendSum3rd ! coefficients for the interface correction
 
+    integer :: use_splitting = 0
+
     call mpas_timer_start("lts time-step prep")
+
+    err = 0
 
     M = config_dt_scaling_LTS
     nRegions = 2
@@ -203,6 +213,7 @@ module ocn_time_integration_lts
                                                scratchPool)
     call mpas_pool_get_subpool(statePool, 'tracers', &
                                                tracersPool)
+    call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
 
     !--- Retrieve state variables at necessary time levels
 
@@ -223,6 +234,13 @@ module ocn_time_integration_lts
                                          layerThicknessFirstStage, 3)
     call mpas_pool_get_array(statePool, 'layerThickness', &
                                          layerThicknessSecondStage, 4)
+
+    call mpas_pool_get_array(statePool, 'ssh', &
+                                         sshCur, 1)
+    call mpas_pool_get_array(statePool, 'ssh', &
+                                         sshFirstStage, 3)
+    call mpas_pool_get_array(statePool, 'ssh', &
+                                         sshSecondStage, 4)
 
     !--- Retrieve tendency variables
 
@@ -373,11 +391,14 @@ module ocn_time_integration_lts
 
     call mpas_timer_start("lts main loop")
 
+
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! BEGIN LTS SCHEME
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     ! -------------------------------- COMPUTE SLOW TEND FOR ALL LTS REGIONS  -------------------------------
+
+    if (use_splitting == 1) then
 
     ! set configs to compute only the slow terms on the momentum equation
     call setConfigsForSlowTends()
@@ -395,6 +416,8 @@ module ocn_time_integration_lts
 
     call mpas_timer_stop("lts slow tend computation")
 
+    end if
+
     ! --------------------------------------  STEP  ------------------------------------------
     ! --- compute the first stage of LTS for interface layer 1, interface layer 2 and coarse
 
@@ -410,7 +433,13 @@ module ocn_time_integration_lts
     ! --- compute tendencies for thickness and fast tendencies only for velocity
     call mpas_timer_start("lts compute tendencies")
 
+    if (use_splitting == 1) then
     call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 0, 1, 1, 1)
+    else
+    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
+    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
+    call ocn_tend_thick(tendPool, forcingPool)
+    end if
 
     call mpas_timer_stop("lts compute tendencies")
 
@@ -418,7 +447,9 @@ module ocn_time_integration_lts
 
     ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage 
 
+    if (use_splitting == 1) then
     normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+    end if
 
     ! --- NORMAL VELOCITY
 
@@ -429,6 +460,16 @@ module ocn_time_integration_lts
           normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dt * normalVelocityTend(:,iEdge)
        end do
     end do
+
+!do iRegion =1,nRegions
+!                do ie = 1, nEdgesInLTSRegion(iRegion,2)
+!       iEdge = edgesInLTSRegion(iRegion,2,ie)
+!       do k = 1, nVertLevels
+!           print*, normalVelocityFirstStage(k,iEdge)
+!         end do
+!     end do
+!end do
+
     ! --- coarse
     do ie = 1, nEdgesInLTSRegion(2,1)
        iEdge = edgesInLTSRegion(2,1,ie)
@@ -439,6 +480,13 @@ module ocn_time_integration_lts
        iEdge = edgesInLTSRegion(1,3,ie)
        normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dt * normalVelocityTend(:,iEdge)
     end do
+
+!            do ie = 1, nEdgesInLTSRegion(2,1)
+!       iEdge = edgesInLTSRegion(2,1,ie)
+!       do k = 1, nVertLevels
+!           print*, normalVelocityFirstStage(k,iEdge)
+!         end do
+!     end do
 
  
     ! --- LAYER THICKNESS
@@ -487,16 +535,27 @@ module ocn_time_integration_lts
  
     call mpas_timer_start("lts compute tendencies")
 
+    if (use_splitting == 1) then
     ! TENDENCIES COMPUTATION ---
     call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 0, 0, 1, 1)
-           
+    else     
+    do iEdge = 1, nEdgesAll
+      normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+    end do
+    call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dt, vertAleTransportTop, err)
+    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dt)
+    call ocn_tend_thick(tendPool, forcingPool)
+    end if
     call mpas_timer_stop("lts compute tendencies")
 
 
     call mpas_timer_start("lts advance soln")
     ! --- advance solution for interface layer 1, interface layer 2 and coarse with second stage 
 
+    if (use_splitting == 1) then
     normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+    end if
 
     ! --- NORMAL VELOCITY
 
@@ -517,6 +576,22 @@ module ocn_time_integration_lts
                                                + weightTend * dt * normalVelocityTend(:,iEdge)
        end do
     end do
+
+!    do iRegion =1,nRegions
+!                do ie = 1, nEdgesInLTSRegion(iRegion,2)
+!       iEdge = edgesInLTSRegion(iRegion,2,ie)
+!       do k = 1, nVertLevels
+!           print*, normalVelocitySecondStage(k,iEdge)
+!         end do
+!     end do
+!end do
+
+!            do ie = 1, nEdgesInLTSRegion(2,1)
+!       iEdge = edgesInLTSRegion(2,1,ie)
+!       do k = 1, nVertLevels
+!           print*, normalVelocitySecondStage(k,iEdge)
+!        end do
+!     end do
 
     ! --- LAYER THICKNESS
 
@@ -588,6 +663,12 @@ module ocn_time_integration_lts
 
        call mpas_timer_stop("lts prognostic halo update")
 
+!       do ic = 1, nCellsAll
+!            do k = 1, maxLevelCell(ic)
+!           print*,  layerThicknessCur(k,ic)
+!           end do
+!       end do    
+
        ! --- update halos for diagnostic variables
        call mpas_timer_start("lts diagnostic halo update")
        call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
@@ -600,8 +681,18 @@ module ocn_time_integration_lts
 
        call mpas_timer_start("lts compute tendencies")
 
+       if (use_splitting == 1) then
        ! --- compute tendencies for thickness and fast tendencies only for velocity
        call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 1, 1, 0, 1)
+       else
+       do iEdge = 1, nEdgesAll
+          normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+       end do
+       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 1)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalTransportVelocity, sshCur, dtFine, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dtFine)
+       call ocn_tend_thick(tendPool, forcingPool)
+       end if
 
        call mpas_timer_stop("lts compute tendencies")
 
@@ -609,8 +700,10 @@ module ocn_time_integration_lts
 
        ! --- advance fine solution (first stage of LTS) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
        ! layer 2 also restore soln cur by copying it back from soln new
- 
+
+       if (use_splitting == 1) then
        normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+       end if
 
        ! --- NORMAL VELOCITY
 
@@ -635,6 +728,26 @@ module ocn_time_integration_lts
           iEdge = edgesInLTSRegion(1,3,ie)
           normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
        end do
+
+       !     do ie = 1, nEdgesInLTSRegion(1,1)
+       !iEdge = edgesInLTSRegion(1,1,ie)
+       !do k = 1, nVertLevels
+        !   print*, normalVelocityFirstStage(k,iEdge)
+        !if(ie==1) then
+       !print*, normalVelocityTend(k,iEdge)
+       !print*, iEdge
+       !print*, k
+       !end if
+       ! end do
+     !end do
+
+      !      do ie = 1, nEdgesInLTSRegion(1,3)
+      ! iEdge = edgesInLTSRegion(1,3,ie)
+      ! do k = 1, nVertLevels
+        !   print*, normalVelocityFirstStage(k,iEdge)
+       !print*, normalVelocityTend(k,iEdge)
+      !  end do
+     !end do
  
        ! --- LAYER THICKNESS
 
@@ -713,8 +826,18 @@ module ocn_time_integration_lts
 
        call mpas_timer_start("lts compute tendencies")
 
+       if (use_splitting == 1) then
        ! TENDENCIES COMPUTATION ---
        call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 1, 1, 0, 1)
+       else
+       do iEdge = 1, nEdgesAll
+          normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+       end do
+       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dtFine, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dtFine)
+       call ocn_tend_thick(tendPool, forcingPool)
+       end if     
 
        call mpas_timer_stop("lts compute tendencies")
 
@@ -723,7 +846,9 @@ module ocn_time_integration_lts
        ! --- advance fine solution (second stage of LTS) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface
        ! layer 2 also restore soln first stage by copying it back from soln new
 
+       if (use_splitting == 1) then
        normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+       end if
     
        ! --- NORMAL VELOCITY
 
@@ -831,7 +956,17 @@ module ocn_time_integration_lts
 
        call mpas_timer_start("lts compute tendencies")
 
+       if(use_splitting == 1) then
        call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 1, 1, 0, 1)
+       else
+       do iEdge = 1, nEdgesAll
+          normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:, iEdge)
+       end do
+       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dtFine, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dtFine)
+       call ocn_tend_thick(tendPool, forcingPool)
+       end if
 
        call mpas_timer_stop("lts compute tendencies")
 
@@ -840,7 +975,9 @@ module ocn_time_integration_lts
        ! --- advance fine solution (third stage of LTS) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface
        ! layer 2 also restore soln second stage by copying it back from soln new
 
+       if(use_splitting == 1) then
        normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+       end if
     
        ! --- NORMAL VELOCITY
 
@@ -952,14 +1089,26 @@ module ocn_time_integration_lts
 
     call mpas_timer_start("lts compute tendencies")
 
+    if(use_splitting == 1) then
     call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 0, 0, 1, 0)
+    else 
+    do iEdge = 1, nEdgesAll
+       normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
+    end do
+    call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dt, vertAleTransportTop, err)
+    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dt)
+    call ocn_tend_thick(tendPool, forcingPool)
+    end if
 
     call mpas_timer_stop("lts compute tendencies")
 
     call mpas_timer_start("lts advance soln")
     ! --- advance solution for coarse with third stage of LTS
-
+    
+    if(use_splitting == 1) then
     normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+    end if
 
     ! --- NORMAL VELOCITY
 
@@ -1022,6 +1171,7 @@ module ocn_time_integration_lts
     call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=2)
     call mpas_timer_stop("lts prognostic halo update")
 
+
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! END LTS SCHEME
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1032,8 +1182,10 @@ module ocn_time_integration_lts
     !  A little clean up at the end
     !
 
+    if (use_splitting == 1) then
     ! reset configs
     call resetConfigs()
+    end if
 
     call mpas_timer_start("lts cleanup phase")
 
@@ -1049,6 +1201,20 @@ module ocn_time_integration_lts
        end do
     end if
 
+    do iEdge = 1, nEdgesAll
+       normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
+    end do
+
+    call mpas_reconstruct(meshPool,  normalVelocityNew, &
+                          velocityX, velocityY, velocityZ,   &
+                          velocityZonal, velocityMeridional, &
+                          includeHalos = .true.)
+
+    call mpas_reconstruct(meshPool, gradSSH,          &
+                          gradSSHX, gradSSHY, gradSSHZ,    &
+                          gradSSHZonal, gradSSHMeridional, &
+                          includeHalos = .true.)
+
     do iCell = 1, nCellsAll
        surfaceVelocity(indexSurfaceVelocityZonal, iCell) = velocityZonal(1, iCell)
        surfaceVelocity(indexSurfaceVelocityMeridional, iCell) = velocityMeridional(1, iCell)
@@ -1057,6 +1223,7 @@ module ocn_time_integration_lts
        SSHGradient(indexSSHGradientMeridional, iCell) = gradSSHMeridional(iCell)
     end do
 
+    call ocn_time_average_coupled_accumulate( statePool, forcingPool, 2)
 
     ! DIAGNOSTICS UPDATE ---
     call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 2)
