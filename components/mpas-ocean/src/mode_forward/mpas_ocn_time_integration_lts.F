@@ -176,7 +176,8 @@ module ocn_time_integration_lts
     real (kind=RKIND) :: &
        weightTendSum1st, weightTendSum2nd, weightTendSum3rd ! coefficients for the interface correction
 
-    integer :: use_splitting = 0
+    integer :: use_splitting = 1
+    integer :: use_lts_tends = 1
 
     call mpas_timer_start("lts time-step prep")
 
@@ -312,7 +313,6 @@ module ocn_time_integration_lts
     normalVelocityTendSum3rd(:,:) = 0.0_RKIND
     layerThicknessTendSum3rd(:,:) = 0.0_RKIND
 
-    ! TODO: do we still need this??
     if (associated(block % prev)) then
        call mpas_pool_get_subpool(block % prev % structs, 'tend_sum_1st', tendSum1stPool)
        call mpas_pool_get_subpool(block % prev % structs, 'tend_sum_2nd', tendSum2ndPool)         
@@ -406,9 +406,6 @@ module ocn_time_integration_lts
     call mpas_timer_start("lts slow tend computation")
 
     ! SLOW TENDENCY COMPUTATION --- (this is only for the momentum equation)
-    !TODO the call below has to be uncommented if we fix the computation
-    !of the forcing in the framework
-    !call ocn_time_varying_forcing_get(domain % streamManager, domain, domain % clock)
     call ocn_tend_vel(domain,tendSlowPool, statePool, forcingPool, 1, domain % dminfo, dt)
 
     ! set configs to compute only the fast terms on the momentum equation
@@ -434,11 +431,19 @@ module ocn_time_integration_lts
     call mpas_timer_start("lts compute tendencies")
 
     if (use_splitting == 1) then
-    call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 0, 1, 1, 1)
+
+       if(use_lts_tends == 1) then    
+          call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 0, 1, 1, 1)
+       else     
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
+          call ocn_tend_thick(tendPool, forcingPool)
+       end if
+
     else
-    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
-    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
-    call ocn_tend_thick(tendPool, forcingPool)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
+       call ocn_tend_thick(tendPool, forcingPool)
     end if
 
     call mpas_timer_stop("lts compute tendencies")
@@ -448,7 +453,7 @@ module ocn_time_integration_lts
     ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage 
 
     if (use_splitting == 1) then
-    normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+       normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
     end if
 
     ! --- NORMAL VELOCITY
@@ -461,15 +466,6 @@ module ocn_time_integration_lts
        end do
     end do
 
-!do iRegion =1,nRegions
-!                do ie = 1, nEdgesInLTSRegion(iRegion,2)
-!       iEdge = edgesInLTSRegion(iRegion,2,ie)
-!       do k = 1, nVertLevels
-!           print*, normalVelocityFirstStage(k,iEdge)
-!         end do
-!     end do
-!end do
-
     ! --- coarse
     do ie = 1, nEdgesInLTSRegion(2,1)
        iEdge = edgesInLTSRegion(2,1,ie)
@@ -481,14 +477,6 @@ module ocn_time_integration_lts
        normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dt * normalVelocityTend(:,iEdge)
     end do
 
-!            do ie = 1, nEdgesInLTSRegion(2,1)
-!       iEdge = edgesInLTSRegion(2,1,ie)
-!       do k = 1, nVertLevels
-!           print*, normalVelocityFirstStage(k,iEdge)
-!         end do
-!     end do
-
- 
     ! --- LAYER THICKNESS
 
     ! --- interface layers
@@ -536,16 +524,31 @@ module ocn_time_integration_lts
     call mpas_timer_start("lts compute tendencies")
 
     if (use_splitting == 1) then
-    ! TENDENCIES COMPUTATION ---
-    call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 0, 0, 1, 1)
+
+       if(use_lts_tends == 1) then
+          call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 0, 0, 1, 1)
+       else
+
+          do iEdge = 1, nEdgesAll
+             normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+          end do
+          call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dt, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dt)
+          call ocn_tend_thick(tendPool, forcingPool)
+
+       end if   
+
     else     
-    do iEdge = 1, nEdgesAll
-      normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
-    end do
-    call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
-    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dt, vertAleTransportTop, err)
-    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dt)
-    call ocn_tend_thick(tendPool, forcingPool)
+
+       do iEdge = 1, nEdgesAll
+         normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+       end do
+       call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dt, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dt)
+       call ocn_tend_thick(tendPool, forcingPool)
+
     end if
     call mpas_timer_stop("lts compute tendencies")
 
@@ -576,22 +579,6 @@ module ocn_time_integration_lts
                                                + weightTend * dt * normalVelocityTend(:,iEdge)
        end do
     end do
-
-!    do iRegion =1,nRegions
-!                do ie = 1, nEdgesInLTSRegion(iRegion,2)
-!       iEdge = edgesInLTSRegion(iRegion,2,ie)
-!       do k = 1, nVertLevels
-!           print*, normalVelocitySecondStage(k,iEdge)
-!         end do
-!     end do
-!end do
-
-!            do ie = 1, nEdgesInLTSRegion(2,1)
-!       iEdge = edgesInLTSRegion(2,1,ie)
-!       do k = 1, nVertLevels
-!           print*, normalVelocitySecondStage(k,iEdge)
-!        end do
-!     end do
 
     ! --- LAYER THICKNESS
 
@@ -663,12 +650,6 @@ module ocn_time_integration_lts
 
        call mpas_timer_stop("lts prognostic halo update")
 
-!       do ic = 1, nCellsAll
-!            do k = 1, maxLevelCell(ic)
-!           print*,  layerThicknessCur(k,ic)
-!           end do
-!       end do    
-
        ! --- update halos for diagnostic variables
        call mpas_timer_start("lts diagnostic halo update")
        call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
@@ -682,16 +663,33 @@ module ocn_time_integration_lts
        call mpas_timer_start("lts compute tendencies")
 
        if (use_splitting == 1) then
+
        ! --- compute tendencies for thickness and fast tendencies only for velocity
-       call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 1, 1, 0, 1)
+       
+          if(use_lts_tends == 1) then
+             call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 1, 1, 0, 1)
+          else   
+
+             do iEdge = 1, nEdgesAll
+                normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+             end do
+             call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 1)
+             call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalTransportVelocity, sshCur, dtFine, vertAleTransportTop, err)
+             call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dtFine)
+             call ocn_tend_thick(tendPool, forcingPool)
+
+          end if   
+
        else
-       do iEdge = 1, nEdgesAll
-          normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
-       end do
-       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 1)
-       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalTransportVelocity, sshCur, dtFine, vertAleTransportTop, err)
-       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dtFine)
-       call ocn_tend_thick(tendPool, forcingPool)
+
+          do iEdge = 1, nEdgesAll
+             normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+          end do
+          call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 1)
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalTransportVelocity, sshCur, dtFine, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dtFine)
+          call ocn_tend_thick(tendPool, forcingPool)
+
        end if
 
        call mpas_timer_stop("lts compute tendencies")
@@ -702,7 +700,7 @@ module ocn_time_integration_lts
        ! layer 2 also restore soln cur by copying it back from soln new
 
        if (use_splitting == 1) then
-       normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+          normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
        end if
 
        ! --- NORMAL VELOCITY
@@ -728,26 +726,6 @@ module ocn_time_integration_lts
           iEdge = edgesInLTSRegion(1,3,ie)
           normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
        end do
-
-       !     do ie = 1, nEdgesInLTSRegion(1,1)
-       !iEdge = edgesInLTSRegion(1,1,ie)
-       !do k = 1, nVertLevels
-        !   print*, normalVelocityFirstStage(k,iEdge)
-        !if(ie==1) then
-       !print*, normalVelocityTend(k,iEdge)
-       !print*, iEdge
-       !print*, k
-       !end if
-       ! end do
-     !end do
-
-      !      do ie = 1, nEdgesInLTSRegion(1,3)
-      ! iEdge = edgesInLTSRegion(1,3,ie)
-      ! do k = 1, nVertLevels
-        !   print*, normalVelocityFirstStage(k,iEdge)
-       !print*, normalVelocityTend(k,iEdge)
-      !  end do
-     !end do
  
        ! --- LAYER THICKNESS
 
@@ -827,16 +805,31 @@ module ocn_time_integration_lts
        call mpas_timer_start("lts compute tendencies")
 
        if (use_splitting == 1) then
-       ! TENDENCIES COMPUTATION ---
-       call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 1, 1, 0, 1)
+
+          if(use_lts_tends == 1) then    
+             call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 3, 1, 1, 0, 1)
+          else   
+
+             do iEdge = 1, nEdgesAll
+                normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+             end do
+             call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+             call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dtFine, vertAleTransportTop, err)
+             call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dtFine)
+             call ocn_tend_thick(tendPool, forcingPool)
+
+          end if   
+
        else
-       do iEdge = 1, nEdgesAll
-          normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
-       end do
-       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
-       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dtFine, vertAleTransportTop, err)
-       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dtFine)
-       call ocn_tend_thick(tendPool, forcingPool)
+
+          do iEdge = 1, nEdgesAll
+             normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+          end do
+          call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 3)
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessFirstStage, layerThickEdgeFlux, normalTransportVelocity, sshFirstStage, dtFine, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 3, domain % dminfo, dtFine)
+          call ocn_tend_thick(tendPool, forcingPool)
+
        end if     
 
        call mpas_timer_stop("lts compute tendencies")
@@ -847,7 +840,7 @@ module ocn_time_integration_lts
        ! layer 2 also restore soln first stage by copying it back from soln new
 
        if (use_splitting == 1) then
-       normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+          normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
        end if
     
        ! --- NORMAL VELOCITY
@@ -957,15 +950,31 @@ module ocn_time_integration_lts
        call mpas_timer_start("lts compute tendencies")
 
        if(use_splitting == 1) then
-       call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 1, 1, 0, 1)
+
+          if(use_lts_tends == 1) then
+             call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 1, 1, 0, 1)
+          else   
+
+             do iEdge = 1, nEdgesAll
+                normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:, iEdge)
+             end do
+             call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+             call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dtFine, vertAleTransportTop, err)
+             call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dtFine)
+             call ocn_tend_thick(tendPool, forcingPool)
+
+           end if  
+          
        else
-       do iEdge = 1, nEdgesAll
-          normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:, iEdge)
-       end do
-       call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
-       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dtFine, vertAleTransportTop, err)
-       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dtFine)
-       call ocn_tend_thick(tendPool, forcingPool)
+
+          do iEdge = 1, nEdgesAll
+             normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:, iEdge)
+          end do
+          call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dtFine, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dtFine)
+          call ocn_tend_thick(tendPool, forcingPool)
+
        end if
 
        call mpas_timer_stop("lts compute tendencies")
@@ -976,7 +985,7 @@ module ocn_time_integration_lts
        ! layer 2 also restore soln second stage by copying it back from soln new
 
        if(use_splitting == 1) then
-       normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+          normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
        end if
     
        ! --- NORMAL VELOCITY
@@ -1090,15 +1099,31 @@ module ocn_time_integration_lts
     call mpas_timer_start("lts compute tendencies")
 
     if(use_splitting == 1) then
-    call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 0, 0, 1, 0)
+
+       if(use_lts_tends == 1) then
+          call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 4, 0, 0, 1, 0)
+       else    
+
+          do iEdge = 1, nEdgesAll
+             normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
+          end do
+          call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+          call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dt, vertAleTransportTop, err)
+          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dt)
+          call ocn_tend_thick(tendPool, forcingPool)
+
+       end if
+
     else 
-    do iEdge = 1, nEdgesAll
-       normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
-    end do
-    call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
-    call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dt, vertAleTransportTop, err)
-    call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dt)
-    call ocn_tend_thick(tendPool, forcingPool)
+
+       do iEdge = 1, nEdgesAll
+          normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
+       end do
+       call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, scratchPool, tracersPool, 4)
+       call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessSecondStage, layerThickEdgeFlux, normalTransportVelocity, sshSecondStage, dt, vertAleTransportTop, err)
+       call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 4, domain % dminfo, dt)
+       call ocn_tend_thick(tendPool, forcingPool)
+
     end if
 
     call mpas_timer_stop("lts compute tendencies")
@@ -1107,7 +1132,7 @@ module ocn_time_integration_lts
     ! --- advance solution for coarse with third stage of LTS
     
     if(use_splitting == 1) then
-    normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
+       normalVelocityTend(:,:) = normalVelocityTend(:,:) + normalVelocityTendSlow(:,:)
     end if
 
     ! --- NORMAL VELOCITY
@@ -1183,8 +1208,8 @@ module ocn_time_integration_lts
     !
 
     if (use_splitting == 1) then
-    ! reset configs
-    call resetConfigs()
+       ! reset configs
+       call resetConfigs()
     end if
 
     call mpas_timer_start("lts cleanup phase")
@@ -1409,6 +1434,8 @@ module ocn_time_integration_lts
 
    integer, dimension(:), pointer :: nCellsArray
 
+   real (kind=RKIND) tendTmp1, tendTmp2
+
    betaSelfAttrLoad = config_self_attraction_and_loading_beta
    nRegions = 2
 
@@ -1441,18 +1468,16 @@ module ocn_time_integration_lts
       kmax = maxLevelEdgeTop(iEdge)
       cell1 = cellsOnEdge(1,iEdge)
       cell2 = cellsOnEdge(2,iEdge)
-      do k=1,nVertLevels
-      ! initialize layerThickEdgeFlux to avoid divide by zero and NaN problems.
+      do k = 1,nVertLevels
+         ! initialize layerThicknessEdgeMean to avoid divide by
+         ! zero and NaN problems.
          layerThickEdgeFlux(k,iEdge) = -1.0e34_RKIND
       end do
       do k = kmin,kmax
-         if (normalVelocity(k,iEdge) > 0.0_RKIND) then
-            layerThickEdgeFlux(k,iEdge) = layerThickness(k,cell1)
-         elseif (normalVelocity(k,iEdge) < 0.0_RKIND) then
-            layerThickEdgeFlux(k,iEdge) = layerThickness(k,cell2)
-         else
-            layerThickEdgeFlux(k,iEdge) = max(layerThickness(k,cell1), layerThickness(k,cell2))
-         end if
+         ! central differenced
+         layerThickEdgeFlux(k,iEdge) = 0.5_RKIND * &
+                                      (layerThickness(k,cell1) + &
+                                       layerThickness(k,cell2))
       end do
    end do
 
@@ -1469,9 +1494,8 @@ module ocn_time_integration_lts
    end do
 
    ! inline computation of the tendencies
-
    normalVelocityTend(:,:) = 0.0_RKIND
-   layerThicknessTend(:, :) = 0.0_RKIND
+   layerThicknessTend(:,:) = 0.0_RKIND
 
    ! interface
    if (computeOnInterface == 1) then
@@ -1486,8 +1510,9 @@ module ocn_time_integration_lts
             kMax = maxLevelEdgeTop(iEdge)
             do k=kMin,kMax
                normalVelocityTend(k,iEdge) = normalVelocityTend(k,iEdge) &
-                                             - edgeMask(k,iEdge) * invdcEdge * ( gravity * ( (ssh(cell2) - ssh(cell1)) &
-                                             - (1.0_RKIND - ssh_sal_on) * betaSelfAttrLoad * (ssh(cell2) - ssh(cell1)) ) )
+                                             - edgeMask(k,iEdge) * invdcEdge * ( gravity * &
+                                                                 ( (ssh(cell2) - ssh(cell1)) - (1.0_RKIND - ssh_sal_on) * betaSelfAttrLoad * (ssh(cell2) - ssh(cell1)) ) &
+                                                                               )
             end do
          end do
          ! thickness tendency
@@ -1603,7 +1628,6 @@ module ocn_time_integration_lts
    ! pressure gradient tendency terms
    config_split_ssh_terms = .false. !this has the ssh terms 
    config_split_non_ssh_terms = .true. !this has the non ssh terms
-   config_use_tidal_potential_forcing = .true. !computes the tidal potential
    config_use_time_varying_atmospheric_forcing = .true.
 
    ! Coriolis and kinetic energy grad tendency term
@@ -1628,7 +1652,6 @@ module ocn_time_integration_lts
 
    config_split_ssh_terms = .true. !this has the ssh terms 
    config_split_non_ssh_terms = .false. !this has the non ssh terms
-   config_use_tidal_potential_forcing = .false. !computes the tidal potential
    config_use_time_varying_atmospheric_forcing = .false.
 
    ! Coriolis and kinetic energy grad tendency term
@@ -1658,7 +1681,6 @@ module ocn_time_integration_lts
    config_disable_vel_surface_stress = .false.
    config_disable_vel_topographic_wave_drag = .false.
    config_disable_vel_explicit_bottom_drag = .false.
-   config_use_tidal_potential_forcing = .true.
    config_use_bulk_wind_stress = .true.
 
    end subroutine resetConfigs!}}}
