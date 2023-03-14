@@ -436,7 +436,7 @@ module ocn_time_integration_lts
           call ocn_lts_tends(statePool, meshPool, LTSPool, tendPool, 1, 0, 1, 1, 1)
        else     
           call ocn_vert_transport_velocity_top(verticalMeshPool, layerThicknessCur, layerThickEdgeFlux, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
-          call ocn_tend_vel(domain,tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
+          call ocn_tend_vel(domain, tendPool, statePool, forcingPool, 1, domain % dminfo, dt)
           call ocn_tend_thick(tendPool, forcingPool)
        end if
 

@@ -436,10 +436,10 @@ contains
       !$acc update device(ssh_sal)
 
       ! Add tidal potential (if needed) 
+      call ocn_vel_tidal_potential_init_light(domain,err)
       call ocn_compute_tidal_potential_forcing(err)
       if ((config_time_integrator == 'RK4') .or. (config_time_integrator =='LTS') .or. (config_time_integrator =='SSPRK3')) then
         ! for split explicit, tidal forcing is added in barotropic subcycles
-        call ocn_vel_tidal_potential_init(domain,err)
         call ocn_vel_tidal_potential_tend(ssh,surfacePressure, tendVel, err)
       endif
 

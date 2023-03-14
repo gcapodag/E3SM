@@ -51,6 +51,7 @@ module ocn_vel_tidal_potential
    public :: ocn_vel_tidal_potential_tend, &
              ocn_compute_tidal_potential_forcing, &
              ocn_vel_tidal_potential_init, &
+             ocn_vel_tidal_potential_init_light, &
              tidal_constituent_factors
 
    !--------------------------------------------------------------------
@@ -175,7 +176,7 @@ contains
          kMax = maxLevelEdgeTop(iEdge)
 
          potentialGrad = - gravity*invdcEdge* &
-            (  nonSshTermsSplit * tidalPotEta(cell2) - tidalPotEta(cell1) &
+            (  nonSshTermsSplit * tidalPotEta(cell2) - nonSshTermsSplit * tidalPotEta(cell1) &
              + (1.0_RKIND - ssh_sal_on) * betaSelfAttrLoad * (sshTermSplit * (ssh(cell2) - ssh(cell1)) & 
              + nonSshTermsSplit * rho0gInv*(surfacePressure(cell2) - surfacePressure(cell1))) &
              + nonSshTermsSplit * ssh_sal_on * (ssh_sal(cell2) - ssh_sal(cell1)) )
@@ -184,7 +185,9 @@ contains
             tend(k,iEdge) = tend(k,iEdge) - &
                             edgeMask(k,iEdge)*potentialGrad
          end do
+                           
       end do
+
 #ifndef MPAS_OPENACC
       !$omp end parallel do
 #endif
@@ -269,6 +272,70 @@ contains
 
    end subroutine ocn_compute_tidal_potential_forcing!}}}
 
+  subroutine ocn_vel_tidal_potential_init_light(domain,err)!{{{
+
+    !-----------------------------------------------------------------
+      ! input/output variables
+      !-----------------------------------------------------------------
+
+      type (domain_type), intent(inout) :: domain
+
+      !-----------------------------------------------------------------
+      ! output variables
+      !-----------------------------------------------------------------
+
+      integer, intent(out) :: err !< [out] error flag
+
+      !-----------------------------------------------------------------
+      ! local variables
+      !-----------------------------------------------------------------
+
+      type (MPAS_Time_Type) :: &
+         refTime            ! internal reference time
+
+      integer :: &
+         iCell, iCon        ! loop indices for cell, constituent loops
+
+      real (kind=RKIND) :: &
+         lat                ! latitude temporary
+
+      ! pointers for pool variables
+      type (block_type), pointer :: block_ptr
+      type (mpas_pool_type), pointer :: forcingPool
+      type (mpas_pool_type), pointer :: meshPool
+      integer, pointer :: nCells
+      integer, pointer :: nTidalPotentialConstituents
+      real (kind=RKIND), dimension(:), pointer :: latCell
+
+      err = 0
+      tidalPotentialOff = .true.
+      betaSelfAttrLoad  = 0.0_RKIND
+      tidalPotRamp      = 1.0e20_RKIND
+      rho0gInv = 1.0_RKIND / rho_sw / gravity
+      sshTermSplit = 1.0_RKIND
+      nonSshTermsSplit = 1.0_RKIND
+      !*** If tidal potential turned on, set all relevant variables
+
+      if (config_use_tidal_potential_forcing) then
+
+         tidalPotentialOff = .false.
+         if (config_use_self_attraction_loading) then
+            ssh_sal_on = 1.0_RKIND
+         else
+            ssh_sal_on = 0.0_RKIND
+         endif
+
+         betaSelfAttrLoad = config_self_attraction_and_loading_beta
+         tidalPotRamp     = config_tidal_potential_ramp
+
+         if (.not. config_split_ssh_terms) sshTermSplit = 0.0_RKIND
+         if (.not. config_split_non_ssh_terms) nonSshTermsSplit = 0.0_RKIND
+
+      end if ! tidal potential on
+
+      !-----------------------------------------------------------------
+
+   end subroutine ocn_vel_tidal_potential_init_light!}}}
 
 !***********************************************************************
 !
