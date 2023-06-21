@@ -477,20 +477,14 @@ module ocn_time_integration_rk4
         if (config_use_wetting_drying) then
              call mpas_timer_start("RK4-prevent drying")
 
-             ! compute wetting velocity to prevent drying of cell (sets up start of next iterate to not dry)
-             if (config_prevent_drying) then
-               block => domain % blocklist
-                 do while (associated(block))
-                   call ocn_prevent_drying_rk4(block, dt, rk_substep_weights(rk_step), config_zero_drying_velocity, err)
-                   block => block % next
-                 end do
-               ! exchange fields for parallelization
-               call mpas_pool_get_field(statePool, 'normalVelocity', normalVelocityField, 1)
-               call mpas_dmpar_exch_halo_field(normalVelocityField)
-               call mpas_dmpar_exch_halo_field(wettingVelocityField)
-             end if
+            block => domain % blocklist
+            do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
+              call ocn_prevent_drying(provisStatePool, rk_substep_weights(rk_step))
+              block => block % next
+            end do
 
-             call mpas_timer_stop("RK4-prevent drying")
+            call mpas_timer_stop("RK4-prevent drying")
         end if
 
         ! Compute tendencies for velocity, thickness, and tracers.
@@ -585,7 +579,8 @@ module ocn_time_integration_rk4
         if (config_verify_not_dry) then
           block => domain % blocklist
             do while (associated(block))
-              call ocn_wetting_drying_verify(block, config_drying_min_cell_height, err)
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call ocn_wetting_drying_verify(statePool, config_drying_min_cell_height, err, 2)
               block => block % next
             end do
         end if
@@ -1244,9 +1239,11 @@ module ocn_time_integration_rk4
       !$omp do schedule(runtime) private(k)
       do iEdge = 1, nEdges
          do k = 1, nVertLevels
-            normalVelocityProvis(k, iEdge) = edgeMask(k, iEdge)*(normalVelocityCur(k, iEdge) + rkSubstepWeight &
-                                           * normalVelocityTend(k, iEdge))
-            normalVelocityProvis(k, iEdge) = normalVelocityProvis(k, iEdge) * (1.0_RKIND - wettingVelocityFactor(k, iEdge))
+            normalVelocityProvis(k, iEdge) = edgeMask(k, iEdge)*( &
+                                                normalVelocityCur(k, iEdge) * (1.0_RKIND - wettingVelocityFactor(k, iEdge)) &
+                                                + rkSubstepWeight * normalVelocityTend(k, iEdge))
+            normalVelocityProvis(k, iEdge) = normalVelocityProvis(k, iEdge) &
+                                                * (1.0_RKIND - wettingVelocityFactor(k, iEdge))
          end do
       end do
       !$omp end do
