@@ -224,8 +224,10 @@ contains
 
            if (abs(wettingVelocityFactor(k, iEdge)) > 0.0_RKIND) then 
               normalTransportVelocity(k, iEdge) = (1.0_RKIND - wettingVelocityFactor(k, iEdge)) * normalTransportVelocity(k, iEdge)
-              !this line is commented to get the same result as master 
-              !normalVelocity(k, iEdge) = (1.0_RKIND - wettingVelocityFactor(k, iEdge)) * normalVelocity(k, iEdge)
+              ! note: the old velocity is not limited here because doing so would cause a compounding of the limiting that would
+              ! raise (1.0_RKIND - wettingVelocityFactor(k, iEdge)) to a power greater than one. This would be inconsistent 
+              ! with the fact that the limiter for the tendency is just (1.0_RKIND - wettingVelocityFactor(k, iEdge)) when the
+              ! provis velocity is computed. Note that the tendency is not stored but computed from scratch every time.
            end if
         end do
      end do
@@ -309,16 +311,20 @@ contains
           end do
           layerThicknessTmp = layerThicknessTmp + dt * divOutFlux
 
-          call ocn_compute_wetting_velocity_factor(layerThicknessTmp, normalVelocity, iCell)
+          call ocn_compute_wetting_velocity_factor(layerThicknessTmp, normalVelocity, iCell, k)
 
         end do
       end do
       !$omp end do
       !$omp end parallel
 
+      ! WARNING: this halo update might overwrite values of
+      ! wettingVelocityField that should not be overwritten
+      call mpas_dmpar_exch_halo_field(wettingVelocityField)
+
    end subroutine ocn_wetting_drying_wettingVelocity!}}}
 
-   subroutine ocn_compute_wetting_velocity_factor(layerThicknessTmp, normalVelocity, iCell)!{{{
+   subroutine ocn_compute_wetting_velocity_factor(layerThicknessTmp, normalVelocity, iCell, k)!{{{
 
       !-----------------------------------------------------------------
       !
@@ -335,17 +341,26 @@ contains
       integer, intent(in) :: &
          iCell                !< Input: wettingVelocityFactor is computed at the edges of iCell
 
+      integer, intent(in) :: &
+         k                    !< Input: wettingVelocityFactor is computed at layer k
+
       !-----------------------------------------------------------------
       !
       ! local variables
       !
       !-----------------------------------------------------------------
 
-      integer :: i, iEdge, k
+      integer :: i, iEdge
 
       real (kind=RKIND) :: hCrit, hRampMin
 
       hCrit = config_drying_min_cell_height
+
+      ! WARNING: this routine may cause issues in parallel:
+      ! if iEdge is a halo edge for iCell, iCell is drying but the one
+      ! that owns iEdge is not, then the non zero value of wettingVelocityFactor
+      ! set here will be overwritten to zero after the halo update.
+
 
       ! if layer thickness is too small, limit divergence flux outwards with
       ! opposite velocity

@@ -458,23 +458,6 @@ contains
       ! vertical mixing treated implicitly in a later routine
       ! adjust total velocity tendency based on wetting/drying
 
-#ifdef MPAS_OPENACC
-      !$acc parallel loop collapse(2) &
-      !$acc    present(tendVel, wettingVelocityFactor)
-#else
-      !$omp parallel
-      !$omp do schedule(runtime) private(k)
-#endif
-      do iEdge = 1, nEdgesAll
-      do k=1,nVertLevels
-         tendVel(k,iEdge) = tendVel(k,iEdge) * (1.0_RKIND - wettingVelocityFactor(k,iEdge))
-      end do
-      end do
-#ifndef MPAS_OPENACC
-      !$omp end do
-      !$omp end parallel
-#endif
-
       !*** Transfer any needed data back to host and delete inputs
       !$acc exit data &
       !$acc    copyout(tendVel, sfcStress, sfcStressMag) &
