@@ -355,7 +355,7 @@ contains
       !$acc               density, normRelVortEdge, montgomeryPotential, pressure, &
       !$acc               thermExpCoeff, salineContractCoeff, tangentialVelocity, &
       !$acc               layerThickEdgeFlux, kineticEnergyCell, sfcFlxAttCoeff, potentialDensity, &
-      !$acc               vertAleTransportTop, vertViscTopOfEdge, wettingVelocityFactor)
+      !$acc               vertAleTransportTop, vertViscTopOfEdge)
       !$acc enter data &
       !$acc    copyin(tendVel, sfcStress, sfcStressMag, &
       !$acc    ssh, normalVelocity, &
